@@ -1,147 +1,89 @@
-# HR Policy Assistant
+# Phantom Zone Onboarding Coordinator
 
-A bilingual (English / Bangla) conversational AI assistant that answers employee questions about company HR policies — grounded strictly in a provided handbook, with no hallucination outside it.
-
-**Live demo:** https://medicore-hr-assistant.streamlit.app
-
----
-
-## Slides
-
-| | | | |
-|---|---|---|---|
-| ![Slide 1](docs/slides/slide_01.png) | ![Slide 2](docs/slides/slide_02.png) | ![Slide 3](docs/slides/slide_03.png) | ![Slide 4](docs/slides/slide_04.png) |
-| ![Slide 5](docs/slides/slide_05.png) | ![Slide 6](docs/slides/slide_06.png) | ![Slide 7](docs/slides/slide_07.png) | |
-
-[Download deck (PDF)](docs/slides/deck.pdf)
-
----
+A bilingual (Bangla/English) HR onboarding automation system built with n8n and PostgreSQL. Designed as a portfolio project for an AI Solutions Specialist – HR role application.
 
 ## What it does
 
-- Answers HR policy questions in **English or Bangla** based on language of the question
-- Cites the exact **section number** for every answer
-- **Refuses to answer** questions not covered by the handbook (e.g. salary of a manager, competitor policies)
-- Runs entirely on the **Gemini free tier** — zero cost
+Automates the onboarding task lifecycle for new hires across three hire types (head office, factory, field force):
 
----
+- **Workflow 1 — Intake:** Generates a personalised task plan for each new hire based on hire type. Detects blockers (missing manager assignment for head office hires) and logs them before proceeding.
+- **Workflow 2 — Daily Check:** Runs at 8:00 AM daily. Fetches all overdue pending tasks and routes them: escalations (3+ days overdue) go to an approval queue; routine reminders (under 3 days) go directly to the send queue. All messages are bilingual — Bangla or English based on the hire's language preference.
+- **Workflow 3 — Approval:** Runs every 15 minutes. Moves approved escalations from the approval queue to the send queue and marks them processed.
+- **Workflow 0 — Error Logger:** Catches failures from Workflows 2 and 3 and logs them to an audit trail.
 
-## Screenshots
+## Stack
 
-| English answer | Bangla answer | Refusal |
-|---|---|---|
-| ![English demo](docs/slides/ss_english.png) | ![Bangla demo](docs/slides/ss_bangla.png) | ![Refusal demo](docs/slides/ss_refusal.png) |
+- **Automation:** n8n (self-hosted, v2.43.7)
+- **Database:** PostgreSQL 18
+- **Message generation:** Deterministic bilingual code nodes (no external API dependency)
 
----
+## Database schema
 
-## Automated Test-Set Pass Rates
-
-Evaluated against a 50-question blind test set (40 answerable + 10 must-refuse traps). These are automated scorer pass rates, not manually verified accuracy — see [Known limitations](#known-limitations-of-the-current-scorer) for what the scorer does and does not check.
-
-| Metric | Target | Result |
-|---|---|---|
-| English pass rate | ≥ 90% | **95.0%** |
-| Bangla pass rate | ≥ 90% | **100.0%** |
-| EN vs BN gap | ≤ 5 percentage points | **5 pp** |
-| Refusal rate (out-of-scope) | 10 / 10 | **10 / 10** |
-
-All four targets met. Evaluated on `gemini-2.0-flash-lite` · test-set v1 · Oct 2026.
-
----
-
-## Tech Stack
-
-| Component | Choice |
+| Table | Purpose |
 |---|---|
-| LLM | Gemini (`gemini-2.0-flash-lite`) via REST API |
-| UI | Streamlit |
-| Language | Python 3.11 |
-| Deployment | Streamlit Cloud |
-| Cost | Gemini free tier (subject to quota limits) |
+| `hires` | New hire records with hire type and language preference |
+| `task_templates` | Master task list per hire type |
+| `tasks` | Per-hire task instances with due dates and status |
+| `approval_queue` | Escalation messages pending HR approval |
+| `outbox` | Messages cleared for sending |
+| `audit_log` | Blocked hires and workflow errors |
+
+## Repository structure
+
+```
+01_business_problem/   — problem statement, scenario suite, definitions
+02_data/               — synthetic hire data, task templates
+03_schema/             — DDL for all six tables
+04_workflows/          — n8n workflow JSON exports
+07_executive_brief/    — slide deck (PDF + PNGs)
+```
+
+## How to run
+
+1. Import workflow JSONs into a self-hosted n8n instance
+2. Create a PostgreSQL credential named `Postgres account`
+3. Run the DDL in `03_schema/` against your database
+4. Seed hires and task templates from `02_data/`
+5. Execute Workflow 1 manually for each new hire
+6. Workflows 2 and 3 run on schedule automatically
+
+## Validation
+
+- 253 tasks created across 20 new hires (7 head office, 6 factory, 6 field force, 1 blocked)
+- 0 messages sent without approval
+- Bilingual output confirmed for both Bangla and English preferences
+- Error logging confirmed — blocked hire and workflow failures captured in audit trail
 
 ---
 
-## How it works
+## Executive Brief
 
-1. The full HR handbook is loaded as context on every request
-2. Policy rules (answer only from the handbook, cite sections, refuse out-of-scope questions, reply in the user's language) are sent as the first turn in the conversation. Note: the Gemini free-tier REST API (`v1beta`) does not expose a dedicated system-instruction field, so rules are embedded in the user turn rather than a true system prompt.
-3. The model returns a complete response via the Gemini REST API, displayed in the Streamlit chat interface
+Full deck: [`07_executive_brief/phantom_zone_onboarding_brief.pdf`](07_executive_brief/phantom_zone_onboarding_brief.pdf)
 
----
+### Slide 1 — Title
 
-## Run locally
+![Slide 1](07_executive_brief/slide_01.png)
 
-```bash
-git clone https://github.com/tarifhassan27/hr-policy-assistant.git
-cd hr-policy-assistant
-python -m venv venv
-.\venv\Scripts\Activate.ps1  # Windows PowerShell
-pip install -r requirements.txt
-```
+### Slide 2 — The Problem
 
-Create a `.env` file:
-```
-GEMINI_API_KEY=your_key_here
-```
+![Slide 2](07_executive_brief/slide_02.png)
 
-Run:
-```bash
-streamlit run app.py
-```
+### Slide 3 — System Architecture
 
----
+![Slide 3](07_executive_brief/slide_03.png)
 
-## Project structure
+### Slide 4 — Workflow 1: Intake
 
-```
-hr-policy-assistant/
-├── app.py               # Streamlit chatbot
-├── scorer.py            # Generates model answers for all 50 test questions
-├── evaluate.py          # Scores raw answers; outputs evaluation_report.txt
-├── handbook/
-│   └── handbook.md      # HR policy handbook (source of truth)
-├── tests/
-│   └── test_set.csv     # 50-question blind test set
-├── results/
-│   ├── raw_answers.csv        # Model outputs for all 50 questions
-│   └── evaluation_report.txt  # Scored accuracy results
-├── docs/
-│   ├── slides/
-│   │   ├── deck.pdf           # Presentation deck (7 slides)
-│   │   ├── slide_01.png       # Title
-│   │   ├── slide_02.png       # Problem
-│   │   ├── slide_03.png       # Architecture
-│   │   ├── slide_04.png       # English demo
-│   │   ├── slide_05.png       # Bangla demo
-│   │   ├── slide_06.png       # Refusal demo
-│   │   └── slide_07.png       # Evaluation results
-│   ├── pilot-note.md          # How to run a pilot, what to measure
-│   └── how-to-use.md          # Bangla user guide
-├── definitions.md       # Locked accuracy targets (set before any code)
-└── requirements.txt
-```
+![Slide 4](07_executive_brief/slide_04.png)
 
----
+### Slide 5 — Workflow 2: Daily Check
 
-## Evaluation methodology
+![Slide 5](07_executive_brief/slide_05.png)
 
-English scoring uses keyword overlap (≥ 60% of expected keywords must appear) plus primary number matching. Bangla scoring checks that expected numerical values appear in the answer (in ASCII or Bengali script). Refusals are scored by presence of the required out-of-scope phrase and absence of fabricated policy content.
+### Slide 6 — Workflow 3: Approval & Outbox
 
-**Known limitations of the current scorer:**
-- Bangla scoring does not check keywords — only numerical values and refusal phrases
-- The citation checker verifies section numbers exist in the handbook but not that the cited section supports the specific answer
-- Secondary requirements (e.g. a lapse date alongside a leave count) are flagged in English scoring but not enforced in Bangla
+![Slide 6](07_executive_brief/slide_06.png)
 
----
+### Slide 7 — Validation & Error Handling
 
-## Production roadmap
-
-Items not implemented in this demo but required before production deployment:
-
-- **Structured expected facts** — replace free-text expected answers with per-question JSON fields (primary value, conditions, exceptions, dates) and score each independently
-- **Contradiction detection** — a basic numeric heuristic is implemented (flags same-digit-length conflicts for 3+ digit numbers); semantic contradiction detection (e.g. conflicting units, cross-length number conflicts) remains future work
-- **System instruction enforcement** — use the API's dedicated system-instruction field rather than embedding rules in the first user turn
-- **Adversarial refusal tests** — add test cases where a refusal phrase is followed by fabricated content, to catch partial-refusal failures
-- **Exponential backoff** — separate transient API errors (503, network drops) from permanent errors (401, 404) and retry only the former
-- **API key placement** — the Gemini free-tier `v1beta` endpoint requires the key as a URL query parameter; a production deployment should use a backend proxy to keep the key server-side
-- **Runtime citation validation** — run the section-existence check on live chatbot responses, not only during offline evaluation
+![Slide 7](07_executive_brief/slide_07.png)
