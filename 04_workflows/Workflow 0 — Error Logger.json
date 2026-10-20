@@ -1,0 +1,66 @@
+{
+  "name": "Workflow 0 — Error Logger",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "744d2c78-e6cd-4f2a-8def-a95c24a7f8e8",
+      "name": "Error Trigger"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO audit_log (event_type, detail, logged_at)\nVALUES (\n  'error',\n  '{{ $json.workflow.name }}: {{ $json.execution.error.message }}',\n  NOW()\n);",
+        "options": {
+          "queryBatching": "independently"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        224,
+        0
+      ],
+      "id": "4fdebb6d-2af7-4df6-806a-707228c4f5c3",
+      "name": "Log error to audit_log",
+      "credentials": {
+        "postgres": {
+          "id": "gAWv4XlJtsPr6m7K",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Log error to audit_log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "3e1114e4-af7a-447d-be5d-abc7bab488a5",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "a49f33f27c7f4c912645c882f8d9b2b3c0f2240d9de39b4d0254a5c16b879363"
+  },
+  "nodeGroups": [],
+  "id": "Fy8wzYyMO5Bqzf8p",
+  "tags": []
+}

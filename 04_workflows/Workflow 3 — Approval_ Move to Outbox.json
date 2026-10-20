@@ -1,0 +1,141 @@
+{
+  "name": "Workflow 3 — Approval: Move to Outbox",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "id": "9895bd32-ffd3-4cea-874e-e3483acfa1ab",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  id AS queue_id,\n  hire_id,\n  task_id,\n  recipient,\n  draft_message\nFROM approval_queue\nWHERE status = 'approved'\n  AND processed = FALSE;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        224,
+        0
+      ],
+      "id": "b00308c2-aa39-4417-84da-4c7e7c4809af",
+      "name": "Fetch approved messages",
+      "credentials": {
+        "postgres": {
+          "id": "gAWv4XlJtsPr6m7K",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO outbox (hire_id, task_id, recipient, message)\nVALUES (\n  {{ $json.hire_id }},\n  {{ $json.task_id }},\n  '{{ $json.recipient }}',\n  '{{ $json.draft_message }}'\n)\nON CONFLICT DO NOTHING;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        448,
+        0
+      ],
+      "id": "7c28f0c4-b11a-4b05-a6da-edf3c44ea0e6",
+      "name": "Move approved to outbox",
+      "credentials": {
+        "postgres": {
+          "id": "gAWv4XlJtsPr6m7K",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE approval_queue\nSET processed = TRUE\nWHERE id = {{ $('Fetch approved messages').item.json.queue_id }};",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        672,
+        0
+      ],
+      "id": "bce9b393-d593-4bf6-b08c-7bf064cef14f",
+      "name": "Mark queue row processed",
+      "credentials": {
+        "postgres": {
+          "id": "gAWv4XlJtsPr6m7K",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch approved messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch approved messages": {
+      "main": [
+        [
+          {
+            "node": "Move approved to outbox",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Move approved to outbox": {
+      "main": [
+        [
+          {
+            "node": "Mark queue row processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "Fy8wzYyMO5Bqzf8p",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "2c3d18f4-7216-48cd-93c7-f68994d441ef",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "a49f33f27c7f4c912645c882f8d9b2b3c0f2240d9de39b4d0254a5c16b879363"
+  },
+  "nodeGroups": [],
+  "id": "NVglj9qGNYELiQx1",
+  "tags": []
+}

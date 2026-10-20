@@ -1,0 +1,238 @@
+{
+  "name": "Workflow 2 — Daily Check: Draft Messages",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "id": "3da0cc2c-7600-41f0-b615-3373de41fa28",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  t.id AS task_id,\n  t.hire_id,\n  t.task_name,\n  t.owner,\n  t.due_date,\n  t.status,\n  CURRENT_DATE::date - t.due_date AS days_overdue,\n  h.full_name,\n  h.hire_type,\n  h.manager_id,\n  h.preferred_lang\nFROM tasks t\nJOIN hires h ON h.id = t.hire_id\nWHERE t.status = 'pending'\n  AND t.due_date < CURRENT_DATE\nORDER BY days_overdue DESC;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        224,
+        0
+      ],
+      "id": "750a9be3-0cab-4f98-972a-1fb7a1592ad6",
+      "name": "Fetch overdue tasks",
+      "credentials": {
+        "postgres": {
+          "id": "gAWv4XlJtsPr6m7K",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "38fc1f39-95ba-4d67-bfbd-9b8ab9f07f2c",
+              "leftValue": "={{ $json.days_overdue }}",
+              "rightValue": 3,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        448,
+        0
+      ],
+      "id": "59286b6f-eacc-4b53-9d2a-0259ae167f1c",
+      "name": "Route by overdue days"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO outbox (hire_id, task_id, recipient, message)\nVALUES (\n  {{ $json.hire_id }},\n  {{ $json.task_id }},\n  '{{ $json.owner }}',\n  '{{ $json.draft_message }}'\n)\nON CONFLICT DO NOTHING;",
+        "options": {
+          "queryBatching": "independently"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1040,
+        128
+      ],
+      "id": "af0ad749-1643-4b90-9f0b-0e29fbb66241",
+      "name": "Insert routine reminder to outbox",
+      "credentials": {
+        "postgres": {
+          "id": "gAWv4XlJtsPr6m7K",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO approval_queue (hire_id, task_id, message_type, recipient, draft_message)\nVALUES (\n  {{ $json.hire_id }},\n  {{ $json.task_id }},\n  'escalation',\n  '{{ $json.manager_id }}',\n  '{{ $json.draft_message }}'\n)\nON CONFLICT DO NOTHING;",
+        "options": {
+          "queryBatching": "independently"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1040,
+        -128
+      ],
+      "id": "1b7df17b-d1e6-4cee-8fa8-eb97a6579c5b",
+      "name": "Queue escalation for approval",
+      "credentials": {
+        "postgres": {
+          "id": "gAWv4XlJtsPr6m7K",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.item.json;\n\nconst bn = item.preferred_lang === 'bn';\n\nconst message = bn\n  ? `প্রিয় ${item.manager_id ?? 'ম্যানেজার'},\\n\\n` +\n    `এই বার্তাটি জরুরি ভিত্তিতে আপনার দৃষ্টি আকর্ষণের জন্য পাঠানো হচ্ছে।\\n\\n` +\n    `নতুন কর্মী ${item.full_name}-এর অনবোর্ডিং কাজ \"${item.task_name}\" ` +\n    `${item.days_overdue} দিন ধরে অসম্পন্ন রয়েছে (দায়িত্বপ্রাপ্ত: ${item.owner})। ` +\n    `অনুগ্রহ করে অবিলম্বে প্রয়োজনীয় ব্যবস্থা গ্রহণ করুন।\\n\\n` +\n    `ধন্যবাদ,\\nHR অনবোর্ডিং টিম`\n  : `Dear ${item.manager_id ?? 'Manager'},\\n\\n` +\n    `This is an urgent escalation regarding a pending onboarding task.\\n\\n` +\n    `The task \"${item.task_name}\" for new hire ${item.full_name} is now ` +\n    `${item.days_overdue} day(s) overdue (assigned to: ${item.owner}). ` +\n    `Immediate action is required.\\n\\n` +\n    `Regards,\\nHR Onboarding Team`;\n\nreturn {\n  ...item,\n  draft_message: message\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        784,
+        -80
+      ],
+      "id": "46697ce9-73dd-42ce-a0ee-ea7535872465",
+      "name": "Build escalation message"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.item.json;\n\nconst bn = item.preferred_lang === 'bn';\n\nconst message = bn\n  ? `প্রিয় ${item.owner},\\n\\n` +\n    `অনুগ্রহ করে মনে করিয়ে দেওয়া হচ্ছে যে নতুন কর্মী ${item.full_name}-এর ` +\n    `অনবোর্ডিং কাজ \"${item.task_name}\" ${item.days_overdue} দিন ধরে অসম্পন্ন রয়েছে। ` +\n    `দয়া করে যত দ্রুত সম্ভব এটি সম্পন্ন করুন।\\n\\n` +\n    `ধন্যবাদ,\\nHR অনবোর্ডিং টিম`\n  : `Dear ${item.owner},\\n\\n` +\n    `This is a friendly reminder that the onboarding task \"${item.task_name}\" ` +\n    `for new hire ${item.full_name} is ${item.days_overdue} day(s) overdue. ` +\n    `Please complete it at your earliest convenience.\\n\\n` +\n    `Regards,\\nHR Onboarding Team`;\n\nreturn {\n  ...item,\n  draft_message: message\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        784,
+        96
+      ],
+      "id": "87c6033c-b9f0-4076-a4d2-8542aa5e8773",
+      "name": "Build routine reminder"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch overdue tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch overdue tasks": {
+      "main": [
+        [
+          {
+            "node": "Route by overdue days",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by overdue days": {
+      "main": [
+        [
+          {
+            "node": "Build escalation message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build routine reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build escalation message": {
+      "main": [
+        [
+          {
+            "node": "Queue escalation for approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build routine reminder": {
+      "main": [
+        [
+          {
+            "node": "Insert routine reminder to outbox",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Queue escalation for approval": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "Fy8wzYyMO5Bqzf8p",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "35ce5dfe-ba61-4076-ae4f-3f50f737648f",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "a49f33f27c7f4c912645c882f8d9b2b3c0f2240d9de39b4d0254a5c16b879363"
+  },
+  "nodeGroups": [],
+  "id": "XIHLNbj5uxbp8NWV",
+  "tags": []
+}

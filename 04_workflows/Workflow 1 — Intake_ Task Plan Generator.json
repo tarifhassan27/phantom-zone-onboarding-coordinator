@@ -1,0 +1,239 @@
+{
+  "name": "Workflow 1 — Intake: Task Plan Generator",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "b4313057-8e60-43bc-95d3-f1e04369e505",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, full_name, hire_type, start_date, manager_id, preferred_lang\nFROM hires\nWHERE id NOT IN (SELECT DISTINCT hire_id FROM tasks)\n  AND id NOT IN (SELECT DISTINCT hire_id FROM audit_log WHERE event_type = 'blocked');",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        224,
+        0
+      ],
+      "id": "c8524b20-8824-4c88-ba24-95f0c3d65a7f",
+      "name": "Fetch unprocessed hires",
+      "credentials": {
+        "postgres": {
+          "id": "gAWv4XlJtsPr6m7K",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "8168ba42-5b9e-47c1-b87d-8a583063e225",
+              "leftValue": "={{ $json.manager_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "4a752152-1887-464a-9e85-4ce969a44193",
+              "leftValue": "={{ ['factory', 'field_force', 'head_office'].includes($json.hire_type) }}",
+              "rightValue": "=false",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        448,
+        0
+      ],
+      "id": "b59273d0-9964-4177-8855-317a733fe3dd",
+      "name": "Check for blockers"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO audit_log (hire_id, event_type, detail)\nVALUES (\n  {{ $json.id }},\n  'blocked',\n  'hire_type={{ $json.hire_type }}, manager_id={{ $json.manager_id ?? \"NULL\" }}'\n);",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        672,
+        -96
+      ],
+      "id": "9b8b4d17-21c1-4dea-b10d-dad32e47cd7e",
+      "name": "Log blocked hire",
+      "credentials": {
+        "postgres": {
+          "id": "gAWv4XlJtsPr6m7K",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT task_name, owner, due_offset\nFROM task_templates\nWHERE hire_type = '{{ $json.hire_type }}';",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        672,
+        96
+      ],
+      "id": "4b18087c-0353-4c8d-9944-e5be919c9d8e",
+      "name": "Fetch task templates",
+      "credentials": {
+        "postgres": {
+          "id": "gAWv4XlJtsPr6m7K",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const hire_id = $('Check for blockers').item.json.id;\nconst full_name = $('Check for blockers').item.json.full_name;\nconst hire_type = $('Check for blockers').item.json.hire_type;\nconst start_date = $('Check for blockers').item.json.start_date;\n\nconst offset = $input.item.json.due_offset;\nconst task_name = $input.item.json.task_name;\nconst owner = $input.item.json.owner;\n\nconst due = new Date(start_date);\ndue.setDate(due.getDate() + offset);\n\nreturn {\n  hire_id: hire_id,\n  full_name: full_name,\n  hire_type: hire_type,\n  task_name: task_name,\n  owner: owner,\n  due_date: due.toISOString().split('T')[0]\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        864,
+        112
+      ],
+      "id": "491e1ded-d1f2-44a0-8b81-4c10ad041a5c",
+      "name": "Calculate due dates"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO tasks (hire_id, task_name, owner, due_date, status)\nVALUES (\n  {{ $json.hire_id }},\n  '{{ $json.task_name }}',\n  '{{ $json.owner }}',\n  '{{ $json.due_date }}',\n  'pending'\n)\nON CONFLICT (hire_id, task_name) DO NOTHING;",
+        "options": {
+          "queryBatching": "independently"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1088,
+        112
+      ],
+      "id": "d6d8f3aa-c827-4e05-8d89-69f9044ca107",
+      "name": "Insert tasks",
+      "credentials": {
+        "postgres": {
+          "id": "gAWv4XlJtsPr6m7K",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Fetch unprocessed hires",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch unprocessed hires": {
+      "main": [
+        [
+          {
+            "node": "Check for blockers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check for blockers": {
+      "main": [
+        [
+          {
+            "node": "Log blocked hire",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fetch task templates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch task templates": {
+      "main": [
+        [
+          {
+            "node": "Calculate due dates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate due dates": {
+      "main": [
+        [
+          {
+            "node": "Insert tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "5e8e2960-5a3e-4d23-b4a0-05bc393060ad",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "a49f33f27c7f4c912645c882f8d9b2b3c0f2240d9de39b4d0254a5c16b879363"
+  },
+  "nodeGroups": [],
+  "id": "s5q5zsOEmjsSGPjq",
+  "tags": []
+}
