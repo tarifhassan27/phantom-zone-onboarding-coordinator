@@ -35,6 +35,7 @@ Automates the onboarding task lifecycle for new hires across three hire types (h
 02_data/               — synthetic hire data, task templates
 03_schema/             — DDL for all six tables
 04_workflows/          — n8n workflow JSON exports
+07_executive_brief/    — slide deck (PDF + PNGs)
 ```
 
 ## How to run
@@ -52,3 +53,37 @@ Automates the onboarding task lifecycle for new hires across three hire types (h
 - 0 unapproved messages in outbox
 - Bilingual output confirmed for both `bn` and `en` preferences
 - Error logging confirmed via audit_log
+
+---
+
+## Executive Brief
+
+Full deck: [`07_executive_brief/phantom_zone_onboarding_brief.pdf`](07_executive_brief/phantom_zone_onboarding_brief.pdf)
+
+### Slide 1 — Title
+
+![Slide 1](07_executive_brief/slide_01.png)
+
+### Slide 2 — The Problem
+
+![Slide 2](07_executive_brief/slide_02.png)
+
+### Slide 3 — System Architecture
+
+![Slide 3](07_executive_brief/slide_03.png)
+
+### Slide 4 — Workflow 1: Intake
+
+![Slide 4](07_executive_brief/slide_04.png)
+
+### Slide 5 — Workflow 2: Daily Check
+
+![Slide 5](07_executive_brief/slide_05.png)
+
+### Slide 6 — Workflow 3: Approval & Outbox
+
+![Slide 6](07_executive_brief/slide_06.png)
+
+### Slide 7 — Validation & Error Handling
+
+![Slide 7](07_executive_brief/slide_07.png)
