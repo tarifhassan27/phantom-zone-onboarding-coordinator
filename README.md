@@ -6,10 +6,10 @@ A bilingual (Bangla/English) HR onboarding automation system built with n8n and 
 
 Automates the onboarding task lifecycle for new hires across three hire types (head office, factory, field force):
 
-- **Workflow 1 — Intake:** Generates a personalised task plan for each new hire based on hire type. Detects blockers (missing manager ID for head office hires) and logs them before proceeding.
-- **Workflow 2 — Daily Check:** Runs at 8:00 AM daily. Fetches all overdue pending tasks and routes them: escalations (≥3 days overdue) go to an approval queue; routine reminders (<3 days) go directly to outbox. All messages are bilingual — Bangla for `preferred_lang = 'bn'`, English otherwise.
-- **Workflow 3 — Approval:** Runs every 15 minutes. Moves approved escalations from the approval queue to the outbox and marks them processed.
-- **Workflow 0 — Error Logger:** Catches failures from Workflows 2 and 3 and logs them to `audit_log`.
+- **Workflow 1 — Intake:** Generates a personalised task plan for each new hire based on hire type. Detects blockers (missing manager assignment for head office hires) and logs them before proceeding.
+- **Workflow 2 — Daily Check:** Runs at 8:00 AM daily. Fetches all overdue pending tasks and routes them: escalations (3+ days overdue) go to an approval queue; routine reminders (under 3 days) go directly to the send queue. All messages are bilingual — Bangla or English based on the hire's language preference.
+- **Workflow 3 — Approval:** Runs every 15 minutes. Moves approved escalations from the approval queue to the send queue and marks them processed.
+- **Workflow 0 — Error Logger:** Catches failures from Workflows 2 and 3 and logs them to an audit trail.
 
 ## Stack
 
@@ -49,10 +49,10 @@ Automates the onboarding task lifecycle for new hires across three hire types (h
 
 ## Validation
 
-- 253 tasks across 20 hires (7 head office, 6 factory, 6 field force, 1 blocked)
-- 0 unapproved messages in outbox
-- Bilingual output confirmed for both `bn` and `en` preferences
-- Error logging confirmed via audit_log
+- 253 tasks created across 20 new hires (7 head office, 6 factory, 6 field force, 1 blocked)
+- 0 messages sent without approval
+- Bilingual output confirmed for both Bangla and English preferences
+- Error logging confirmed — blocked hire and workflow failures captured in audit trail
 
 ---
 
